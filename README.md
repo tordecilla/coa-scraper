@@ -28,7 +28,7 @@ playwright install chromium
 1. **Clone the repo**
 
    ```bash
-   git clone https://github.com/YOUR_USERNAME/coa-scraper.git
+   git clone https://github.com/tordecilla/coa-scraper.git
    cd coa-scraper
    ```
 
@@ -68,7 +68,7 @@ python scraper.py --category NGA
 python scraper.py --category LGU
 python scraper.py --category GOCC
 
-# Scrape all years (default: most recent year only)
+# Discover reports from all years (default: most recent year only)
 python scraper.py --all-years
 
 # Skip scraping, download all pending/failed entries
