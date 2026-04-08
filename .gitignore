@@ -14,6 +14,9 @@ __pycache__/
 .venv/
 *.egg-info/
 
+# Local config (unused by scraper, gitignored to avoid committing personal paths)
+config.py
+
 # Claude Code local files
 .claude/
 .claudeignore
