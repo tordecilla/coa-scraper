@@ -131,4 +131,4 @@ The scraper does not use proxies, CAPTCHA-solving services, or any credentials.
 - Files are streamed to disk to handle large ZIPs without memory issues.
 - The scraper saves progress to CSV after each year (scraping) and after each file (downloading), so interrupted runs pick up where they left off.
 - HTTP 404 responses mark a file as `skipped` (not retried). Cloudflare transient errors (521–524) are retried with exponential backoff.
-- Downloaded ZIPs are automatically extracted in place.
+- ZIPs are kept as-is; no automatic extraction is performed.

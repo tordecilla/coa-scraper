@@ -18,7 +18,6 @@ import random
 import re
 import signal
 import time
-import zipfile
 from datetime import datetime, timezone
 UTC = timezone.utc
 from pathlib import Path
@@ -376,20 +375,6 @@ def _mark_downloaded(row: dict, dest_path: Path, size: int) -> None:
     log.info(f"  Saved ({size:,} bytes): {dest_path}")
 
 
-def _unzip(dest_path: Path, dest_dir: Path) -> None:
-    try:
-        with zipfile.ZipFile(dest_path) as zf:
-            zf.extractall(dest_dir)
-            names = zf.namelist()
-        log.info(f"  Extracted {len(names)} file(s): {', '.join(names[:3])}")
-    except zipfile.BadZipFile as exc:
-        log.warning(f"  Bad ZIP, skipping extraction: {exc}")
-    except OSError as exc:
-        # e.g. Windows locks desktop.ini in already-opened folders — not a download failure
-        log.warning(f"  Extraction partial (OS error, file still saved): {exc}")
-
-
-
 # HTTP status codes that mean the file is permanently unavailable.
 # 404 = gone for good.  521-524 are temporary server outages — handled by the
 # transient-retry loop, NOT skipped.
@@ -499,8 +484,6 @@ def download_file(ctx, page, row: dict) -> None:
             raise RuntimeError(f"Download failed: {dl.failure()}")
         dl.save_as(str(dest_path))
         _mark_downloaded(row, dest_path, dest_path.stat().st_size)
-        if ext == ".zip":
-            _unzip(dest_path, dest_dir)
     except PlaywrightTimeoutError:
         row["status"]    = "failed"
         row["error_msg"] = "Download did not start within timeout"
