@@ -1,0 +1,22 @@
+# Downloaded files and database
+data/
+!data/.gitkeep
+
+# Logs
+logs/
+
+# Chrome browser profile (session cookies, cache)
+.chrome_profile/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Local machine config (copy config.example.py → config.py and fill in your paths)
+config.py
+
+# Claude Code local files
+.claude/
+.claudeignore
