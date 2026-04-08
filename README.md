@@ -39,20 +39,9 @@ playwright install chromium
    playwright install chromium
    ```
 
-3. **Configure your Chrome profile path**
+3. **Run Chrome once to pass Cloudflare**
 
-   ```bash
-   cp config.example.py config.py
-   ```
-
-   Open `config.py` and set `CHROME_PROFILE_DIR` to your Chrome user data directory:
-
-   - **Windows:** `C:\Users\YOUR_USERNAME\AppData\Local\Google\Chrome\User Data`
-   - **macOS:** `/Users/YOUR_USERNAME/Library/Application Support/Google/Chrome`
-
-   To find your exact profile path, open Chrome and go to `chrome://version` — look for **Profile Path**.
-
-   > The scraper uses your real Chrome profile to pass Cloudflare's browser verification. It does not store or transmit your cookies anywhere.
+   On first run, Chrome will open a Cloudflare challenge page for the COA website. Solve it once manually — the scraper stores the session in `.chrome_profile/` and reuses it automatically on subsequent runs.
 
 ## Usage
 
@@ -133,7 +122,7 @@ Run `python generate_catalogs.py` to generate two structured catalogs from `repo
 
 ## How Cloudflare bypass works
 
-The COA website is protected by Cloudflare, which blocks standard HTTP requests and headless browsers. This scraper uses a **persistent Chrome profile** with automation detection flags disabled. On first run, Chrome may open a Cloudflare challenge page — solve it manually once, and subsequent runs will reuse the session cookies automatically.
+The COA website is protected by Cloudflare, which blocks standard HTTP requests and headless browsers. This scraper launches Chrome with automation detection flags disabled and maintains a dedicated browser profile in `.chrome_profile/`. On first run, Chrome may show a Cloudflare challenge — solve it manually once, and subsequent runs reuse the stored session automatically.
 
 The scraper does not use proxies, CAPTCHA-solving services, or any credentials.
 

@@ -14,9 +14,6 @@ __pycache__/
 .venv/
 *.egg-info/
 
-# Local machine config (copy config.example.py → config.py and fill in your paths)
-config.py
-
 # Claude Code local files
 .claude/
 .claudeignore
