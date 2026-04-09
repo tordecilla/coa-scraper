@@ -335,25 +335,27 @@ def scrape_category(page, cat_key: str, cat_cfg: dict, existing_urls: set[str],
         for agency_cat in agencies:
             agency_id   = agency_cat.get("term_id")
             agency_name = agency_cat.get("name", str(agency_id))
+            agency_rows: list[dict] = []
 
-            # Direct files under agency
-            for f in fetch_files(page, agency_id, root_id):
-                row = _make_row(cat_key, year_name, agency_name, f, existing_urls)
-                if row:
-                    year_rows.append(row)
-                    log.info(f"[{cat_key}] {year_name} / {agency_name}: {f.get('post_title')}")
-
-            # Sub-agencies (one level deeper, e.g. Constitutional Commissions)
-            for sub_cat in fetch_subcategories(page, agency_id):
-                sub_id   = sub_cat.get("term_id")
-                sub_name = sub_cat.get("name", str(sub_id))
-                for f in fetch_files(page, sub_id, root_id):
-                    row = _make_row(cat_key, year_name, f"{agency_name} / {sub_name}", f, existing_urls)
+            def walk(cat_id: int, path: list[str], depth: int = 0) -> None:
+                """Recursively collect files under cat_id, building agency name from path."""
+                if depth > 6:
+                    log.warning(f"[{cat_key}] Max depth reached at {' / '.join(path)}, skipping")
+                    return
+                label = " / ".join(path)
+                for f in fetch_files(page, cat_id, root_id):
+                    row = _make_row(cat_key, year_name, label, f, existing_urls)
                     if row:
-                        year_rows.append(row)
-                        log.info(f"[{cat_key}] {year_name} / {agency_name} / {sub_name}: {f.get('post_title')}")
+                        agency_rows.append(row)
+                        log.info(f"[{cat_key}] {year_name} / {label}: {f.get('post_title')}")
+                for sub_cat in fetch_subcategories(page, cat_id):
+                    sub_name = sub_cat.get("name", str(sub_cat.get("term_id")))
+                    walk(sub_cat.get("term_id"), path + [sub_name], depth + 1)
 
-        yield year_name, year_rows
+            walk(agency_id, [agency_name])
+            # Yield per agency so the caller saves to CSV after each one —
+            # prevents losing all discoveries if the run is interrupted mid-year.
+            yield year_name, agency_rows
 
 
 # ---------------------------------------------------------------------------
