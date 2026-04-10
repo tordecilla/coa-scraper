@@ -218,18 +218,27 @@ class BrowserClosedError(RuntimeError):
     """Raised when the browser/page is closed unexpectedly."""
 
 
+class APIEmptyError(RuntimeError):
+    """Raised when an API call returns an empty response — likely CF session expiry."""
+
+
 def api_get(page, url: str) -> dict | None:
     """
     Fetch a JSON URL using the browser's fetch() so session cookies are included.
     Returns parsed dict or None on error.
     Raises BrowserClosedError if the browser was closed mid-run.
+    Raises APIEmptyError if the response is empty (Cloudflare session likely expired).
     """
     try:
         raw = page.evaluate(f"""async () => {{
             const r = await fetch("{url}", {{credentials: "include"}});
             return await r.text();
         }}""")
+        if not raw or not raw.strip():
+            raise APIEmptyError(f"Empty response from {url}")
         return json.loads(raw.strip())
+    except (APIEmptyError, BrowserClosedError):
+        raise
     except Exception as exc:
         msg = str(exc)
         if "Target page, context or browser has been closed" in msg:
@@ -330,7 +339,21 @@ def scrape_category(page, cat_key: str, cat_cfg: dict, existing_urls: set[str],
         log.info(f"[{cat_key}] Year {year_name}: fetching agencies…")
         year_rows: list[dict] = []
 
-        agencies = fetch_subcategories(page, year_id)
+        # Fetch agencies for this year, reloading CF session if the response is empty.
+        try:
+            agencies = fetch_subcategories(page, year_id)
+        except APIEmptyError:
+            log.warning(f"[{cat_key}] CF session expired fetching agencies for {year_name} — reloading…")
+            if _reload_cf_session(page, url):
+                time.sleep(2)
+                try:
+                    agencies = fetch_subcategories(page, year_id)
+                except APIEmptyError:
+                    log.error(f"[{cat_key}] Still empty after CF reload — skipping year {year_name}")
+                    continue
+            else:
+                log.error(f"[{cat_key}] CF reload failed — skipping year {year_name}")
+                continue
 
         for agency_cat in agencies:
             agency_id   = agency_cat.get("term_id")
@@ -352,7 +375,28 @@ def scrape_category(page, cat_key: str, cat_cfg: dict, existing_urls: set[str],
                     sub_name = sub_cat.get("name", str(sub_cat.get("term_id")))
                     walk(sub_cat.get("term_id"), path + [sub_name], depth + 1)
 
-            walk(agency_id, [agency_name])
+            # Retry walk once with a CF reload if the session expired mid-agency.
+            # Already-seen URLs are deduplicated via existing_urls, so a partial
+            # walk followed by a retry won't produce duplicate rows.
+            for attempt in range(2):
+                try:
+                    walk(agency_id, [agency_name])
+                    break
+                except APIEmptyError:
+                    if attempt == 0:
+                        log.warning(
+                            f"[{cat_key}] CF session expired scraping {agency_name} — reloading…"
+                        )
+                        if _reload_cf_session(page, url):
+                            time.sleep(2)
+                        else:
+                            log.error(f"[{cat_key}] CF reload failed — skipping {agency_name}")
+                            break
+                    else:
+                        log.error(
+                            f"[{cat_key}] Still empty after CF reload — skipping {agency_name}"
+                        )
+
             # Yield per agency so the caller saves to CSV after each one —
             # prevents losing all discoveries if the run is interrupted mid-year.
             yield year_name, agency_rows
@@ -576,6 +620,8 @@ def parse_args():
                    help="Skip scraping, download all discovered/failed entries")
     p.add_argument("--all-years", action="store_true",
                    help="Scrape all years (default: only the most recent)")
+    p.add_argument("--years", default=None,
+                   help="Scrape specific years: range '2014-2019' or list '2014,2015,2016'")
     p.add_argument("--rediscover-failed", action="store_true",
                    help="Re-scrape only the category/year combos that have failed entries, "
                         "to pick up replacement files at new URLs")
@@ -594,6 +640,23 @@ def main():
     _install_sigint_handler()
 
     args = parse_args()
+
+    # Parse --years into a set of year strings
+    explicit_years: set[str] | None = None
+    if args.years:
+        raw = args.years.strip()
+        m = re.fullmatch(r"(20\d{2})-(20\d{2})", raw)
+        if m:
+            lo, hi = sorted([int(m.group(1)), int(m.group(2))])
+            explicit_years = {str(y) for y in range(lo, hi + 1)}
+        else:
+            explicit_years = {y.strip() for y in raw.split(",")}
+        # Validate
+        bad = [y for y in explicit_years if not re.fullmatch(r"20\d{2}", y)]
+        if bad:
+            raise SystemExit(f"Invalid year(s) in --years: {', '.join(bad)}")
+        log.info(f"--years filter: {sorted(explicit_years, reverse=True)}")
+
     rows = load_csv()
     log.info(f"Loaded {len(rows)} existing rows from CSV")
 
@@ -638,7 +701,12 @@ def main():
                     # previous CF failure won't poison the next category.
                     page = ctx.new_page()
                     cat_new = 0
-                    target_yrs = failed_years_by_cat.get(cat_key) if args.rediscover_failed else None
+                    if args.rediscover_failed:
+                        target_yrs = failed_years_by_cat.get(cat_key)
+                    elif args.years:
+                        target_yrs = explicit_years
+                    else:
+                        target_yrs = None
                     try:
                         for year_name, year_rows in scrape_category(
                             page, cat_key, cat_cfg, urls_seen,
