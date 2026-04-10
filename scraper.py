@@ -740,12 +740,13 @@ def main():
     # Download phase
     # ------------------------------------------------------------------
     if not args.discover_only:
+        cat_filter = {args.category} if args.category else set(CATEGORIES)
         if args.retry_failed:
-            to_download = [r for r in rows if r["status"] == "failed"]
+            to_download = [r for r in rows if r["status"] == "failed" and r["category"] in cat_filter]
         else:
             to_download = [
                 r for r in rows
-                if r["status"] in ("discovered", "failed")
+                if r["status"] in ("discovered", "failed") and r["category"] in cat_filter
             ]
 
         log.info(f"Downloading {len(to_download)} file(s)…")
